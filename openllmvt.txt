@@ -1,0 +1,58 @@
+config: Config = validate_config(read_yaml("conf.yaml"))
+server_config = config.system_config
+
+if server_config.enable_proxy:
+    logger.info("Proxy mode enabled - /proxy-ws endpoint will be available")
+
+# Initialize the WebSocket server (synchronous part)
+server = WebSocketServer(config=config)
+
+# Perform asynchronous initialization (loading context, etc.)
+logger.info("Initializing server context...")
+try:
+    asyncio.run(server.initialize())
+    logger.info("Server context initialized successfully.")
+except Exception as e:
+    logger.error(f"Failed to initialize server context: {e}")
+    sys.exit(1)  # Exit if initialization fails
+
+1) Se toma la configuracion paraa conviertir a clases
+2) Se le pasa aa WebSocketServer, aqui hay un aatributo que es default_context_cache
+---> self.default_context_cache = (
+            default_context_cache or ServiceContext()
+3) Este carga las clases y logica en ServiceContext con el metodo initialize() de WebSocketServer
+
+
+class ServiceContext:
+    """Initializes, stores, and updates the asr, tts, and llm instances and other
+    configurations for a connected client."""
+
+    def __init__(self):
+        self.config: Config = None
+        self.system_config: SystemConfig = None
+        self.character_config: CharacterConfig = None
+
+        self.live2d_model: Live2dModel = None
+        self.asr_engine: ASRInterface = None
+        self.tts_engine: TTSInterface = None
+        self.agent_engine: AgentInterface = None
+        # translate_engine can be none if translation is disabled
+        self.vad_engine: VADInterface | None = None
+        self.translate_engine: TranslateInterface | None = None
+
+        self.mcp_server_registery: ServerRegistry | None = None
+        self.tool_adapter: ToolAdapter | None = None
+        self.tool_manager: ToolManager | None = None
+        self.mcp_client: MCPClient | None = None
+        self.tool_executor: ToolExecutor | None = None
+
+        # the system prompt is a combination of the persona prompt and live2d expression prompt
+        self.system_prompt: str = None
+
+        # Store the generated MCP prompt string (if MCP enabled)
+        self.mcp_prompt: str = ""
+
+        self.history_uid: str = ""  # Add history_uid field
+
+        self.send_text: Callable = None
+        self.client_uid: str = None

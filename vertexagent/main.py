@@ -15,3 +15,4 @@ response = model.generate_content(
 )
 
 print(response.text)
+#pip install google-cloud-aiplatform

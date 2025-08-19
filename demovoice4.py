@@ -53,7 +53,7 @@ async def join(ctx):
         )
 
         vc.listen(sink)
-        await ctx.send("Estoy escuchando y transcribiendo con Whisper.")
+        await ctx.send("Estoy escuchando y transcribiendo con Google.")
     else:
         await ctx.send("No estás en un canal de voz.")
 

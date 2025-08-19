@@ -1,0 +1,204 @@
+¡Buenísimo! Te explico el flujo de llamadas (call flow) entre los agentes de VOYAGER (para Minecraft) paso a paso, de forma clara y con qué información entra y sale en cada eslabón.
+
+Flujo general (bucle principal)
+
+Reset inicial
+
+environment.reset() → devuelve agent_state (inventario, equipo, bioma, hora, posición, barras de vida/hambre, bloques y entidades cercanas, cofres vistos, etc.).
+
+Curriculum Agent: medir progreso y proponer tarea
+
+Lee su propio historial: get_completed_tasks() y get_failed_tasks().
+
+Calcula exploration_progress = get_exploration_progress(...).
+
+Con agent_state + exploration_progress → propose_next_task(...) produce un task concreto, alcanzable y verificable.
+
+Cómo lo hace internamente: compone un prompt (de una sola pasada para ahorrar tokens) con:
+
+Directrices para fomentar diversidad y restricciones de verificabilidad.
+
+Estado actual del agente (inventario/equipo/bioma/tiempo/posición, etc.).
+
+Tareas completadas/falladas.
+
+Contexto adicional (preguntas auto-generadas por GPT-3.5 con recuperación opcional de wiki) para aclarar conceptos del juego.
+
+Warm-up: al inicio usa menos contexto y lo incrementa conforme sube el número de tareas completadas.
+
+Intentos para resolver la tarea (hasta 4 rondas)
+Se repite como máximo 4 veces antes de pasar a otra tarea:
+
+3.1) Skill Manager: recuperar habilidades relevantes
+
+skills = retrieve_skills(task, environment_feedback)
+
+Devuelve snippets reutilizables (habilidades previamente aprendidas) que podrían servir para la tarea actual. La primera vez no hay o hay pocas; con el tiempo crece la biblioteca.
+
+3.2) Action Agent: generar código
+
+code = generate_code(task, code, environment_feedback, execution_errors, critique, skills)
+
+Entradas:
+
+La tarea propuesta.
+
+El código previo (si ya hubo intentos).
+
+Environment feedback (chat/logs del juego) del intento anterior.
+
+Execution errors (excepciones/errores al ejecutar).
+
+Critique (diagnóstico del crítico sobre por qué falló).
+
+Skills recuperadas.
+
+El estado actual del agente (también se incluye en el prompt del generador).
+
+El prompt del generador incluye:
+
+Guías de estilo/seguridad para programar.
+
+APIs de control propias (e.g., mineBlock, craftItem, smeltItem, killMob, depositItemIntoChest, etc.) y APIs de Mineflayer (pathfinder.goto, GoalNear, equip, consume, fish, sleep, activateBlock, etc.).
+
+Código del último intento, feedback del entorno, errores y la crítica del verificador.
+
+Habilidades recuperadas y el estado del agente.
+
+Estrategia: primero razona por qué falló, luego propone un plan paso a paso y finalmente genera nuevo código que llame a esas APIs.
+
+3.3) Environment: ejecutar el código
+
+(agent_state, environment_feedback, execution_errors) = environment.step(code)
+
+Ejecuta el código en Minecraft mediante Mineflayer:
+
+Actualiza agent_state (posiciones, inventario, etc.).
+
+Devuelve environment_feedback (p.ej., mensajes del chat, descripciones de eventos).
+
+Si algo rompe, rellena execution_errors (excepciones, timeouts, objetivos no alcanzables, etc.).
+
+3.4) Critic Agent: auto-verificación
+
+(success, critique) = critic_agent.check_task_success(task, agent_state)
+
+Lee la tarea y el estado tras la ejecución (no necesita entidades/bloques no útiles para verificar).
+
+Devuelve:
+
+success: booleano (¿la tarea se cumplió?).
+
+critique: explicación/diagnóstico concreto de qué faltó o cómo corregir.
+
+Si success == True, rompe el bucle de intentos para esta tarea.
+
+Actualizar curriculum/skills
+
+Si éxito:
+
+skill_manager.add_skill(code) → guarda la solución como nueva habilidad reutilizable.
+
+curriculum_agent.add_completed_task(task) → se marca como completada para computar progreso y proponer retos más avanzados después.
+
+Si fallo (tras 4 intentos):
+
+curriculum_agent.add_failed_task(task) → queda registrada para ajustar la frontera de exploración y la dificultad futura.
+
+Repetir
+
+Vuelve a 2) para proponer la siguiente tarea (el lazo es “infinito” hasta que algún criterio externo detiene el sistema).
+
+Resumen de entradas/salidas por agente
+
+Curriculum Agent
+
+In: agent_state, completed_tasks, failed_tasks, progreso de exploración, contexto adicional (Q&A de GPT-3.5 + wiki), warm-up.
+
+Out: task (definida, alcanzable, verificable).
+
+Skill Manager
+
+In (recuperar): task, environment_feedback.
+
+Out: skills relevantes (snippets).
+
+In (aprender): code final exitoso.
+
+Out: habilidad nueva guardada.
+
+Action Agent
+
+In: task, prev code, environment_feedback, execution_errors, critique, skills, agent_state, guías + APIs de control + APIs Mineflayer.
+
+Out: code ejecutable para Mineflayer.
+
+Environment
+
+In: code.
+
+Out: agent_state actualizado, environment_feedback, execution_errors.
+
+Critic Agent
+
+In: task, agent_state (post-ejecución), contexto del task.
+
+Out: success (bool), critique (retroalimentación accionable).
+
+Diagrama de secuencia (ASCII)
+[Curriculum] --(agent_state, progreso)--> propone --> [Task]
+     |
+     v
+ [Intento 1..4]
+     |
+     |---> [Skill Manager] ----(task, env_feedback)---> retrieve
+     |                                  ^                   |
+     |                                  |     <--- skills --|
+     |
+     |---> [Action Agent] --(task, prev code, env_feedback,
+     |                      errors, critique, skills, state)--> code
+     |
+     |---> [Environment] --(code)--> (agent_state, env_feedback, errors)
+     |
+     |---> [Critic] --(task, agent_state)--> (success?, critique)
+                         |                                |
+                         |<----------- si falla ----------|
+                         |
+          si éxito ------+---> romper bucle de intentos
+
+[Si éxito]  -> [Skill Manager.add_skill(code)] & [Curriculum.add_completed_task(task)]
+[Si fracaso]-> [Curriculum.add_failed_task(task)]
+
+(repetir ciclo)
+
+Ejemplo mini (concreto)
+
+Curriculum ve que tienes cobblestone, coal y raw_iron y propone: “Smelt 4 raw iron”.
+
+Skill Manager devuelve habilidades: smeltItem, mineBlock, craftItem.
+
+Action Agent genera código que:
+
+Busca o coloca un furnace cerca.
+
+Usa smeltItem(bot, 'raw_iron', 'coal', 4).
+
+Environment ejecuta; actualiza inventario (aparecen 4 iron_ingot).
+
+Critic verifica: ¿inventario tiene iron_ingot ≥ 4? → success = True; añade la solución como nueva skill y marca la tarea como completada.
+
+Curriculum sube la dificultad para la siguiente propuesta (gracias al warm-up/progreso).
+
+Detalles operativos clave
+
+Hasta 4 intentos por tarea: limita consumo y estancamiento; cada vuelta incorpora feedback, errores y crítica para refinar el siguiente código.
+
+Una sola pasada por prompt (ahorro de tokens): cada agente construye un mensaje “system+user” sin diálogos largos.
+
+Crítica accionable: el crítico no solo dice “falló”, dice por qué y qué ajustar, y eso alimenta al generador en la siguiente ronda.
+
+Aprendizaje acumulativo: las soluciones exitosas se vuelven skills que el agente reutiliza después (transferencia de habilidades).
+
+Contexto incremental (warm-up): al principio, prompts cortos; más adelante, incluyen más estado y contexto para tareas complejas.
+
+Con esto tienes el mapa completo de quién llama a quién, con qué datos, qué devuelve cada módulo y cómo se cierra el ciclo en VOYAGER. Si quieres, te dibujo el mismo flujo para tu propio entorno/stack o lo traduzco a un diagrama UML.
