@@ -22,6 +22,7 @@ def make_recognizer():
 # ----------- Callbacks -----------
 def process_audio(recognizer: sr.Recognizer, audio: sr.AudioData, user):
     """Convierte audio -> texto usando el motor configurado"""
+    print(audio)
     try:
         # puedes usar recognize_google, recognize_whisper, recognize_azure, etc.
         text = recognizer.recognize_google(audio, language='es-PE', show_all=False) # Whisper (necesita openai-whisper)
@@ -49,7 +50,7 @@ async def join(ctx):
             text_cb=got_text,
             default_recognizer="google",  # "google", "azure", etc.
             phrase_time_limit=30,
-			recognizer_factory=make_recognizer
+			      recognizer_factory=make_recognizer
         )
 
         vc.listen(sink)
