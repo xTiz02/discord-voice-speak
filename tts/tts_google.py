@@ -49,13 +49,15 @@ class GoogleTTSEngine(TTSInterface):
         language: str = "es-US",
         voice_name: str = "es-US-Journey-F",
         sample_rate_hz: int = 48000,
-        speaking_rate: float = 1.2
+        speaking_rate: float = 1.2,
+        loop: Optional[asyncio.AbstractEventLoop] = None
     ):
         self.client = texttospeech.TextToSpeechClient()
         self.default_language = language
         self.default_voice_name = voice_name
         self.sample_rate_hz = sample_rate_hz
         self.speaking_rate = speaking_rate
+        self.loop = loop
         logger.info(
             f"GoogleTTSEngine inicializado con voz={voice_name}, lang={language}, "
             f"rate={speaking_rate}, sample_rate={sample_rate_hz}"
@@ -122,7 +124,10 @@ class GoogleTTSEngine(TTSInterface):
         Async generator que produce bytes PCM (s16le 48k mono) a medida que Google los va generando.
         """
         loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=60)
+        #full q
+        queue: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=240)
+
+
 
         text_chunks = chunker(text)
         request_iter = self._build_request_iter(
