@@ -1,9 +1,11 @@
+import logging
 import vertexai
 from vertexai.generative_models import GenerativeModel, GenerationConfig, ChatSession, HarmCategory, HarmBlockThreshold
-import logging
+from typing import Iterator
 
 from m_agent.llm_Interface import LLMInterface
 
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -70,6 +72,74 @@ class VertexAgentEngine(LLMInterface):
         ]
         self.fallback_index = 0
 
+    def chat_stream(self, prompt: str) -> Iterator[str]:
+        """
+        Envía un mensaje al modelo y obtiene respuesta en streaming.
+
+        Args:
+            prompt (str): mensaje del usuario
+
+        Yields:
+            str: bloques de texto conforme se van generando
+        """
+        max_retries = 2
+
+        for attempt in range(max_retries + 1):
+            try:
+                print(f"[DEBUG] VertexAgentEngine.chat_stream() Intento {attempt + 1} → Prompt: {prompt}")
+
+                # Generar respuesta en streaming
+                responses = self.chatSession.send_message(prompt, stream=True)
+
+                has_content = False
+                for response in responses:
+                    if hasattr(response, 'text') and response.text and response.text.strip():
+                        has_content = True
+                        text_block = response.text.strip()
+                        print(f"[DEBUG] VertexAgentEngine.chat_stream() → Bloque recibido: {text_block}")
+                        yield text_block
+
+                if has_content:
+                    return  # Éxito, salir del bucle de reintentos
+                else:
+                    print(f"[WARNING] Respuesta vacía en intento {attempt + 1}")
+                    if attempt == max_retries:
+                        yield self._get_fallback_response(prompt)
+                        return
+
+            except Exception as e:
+                error_msg = str(e).lower()
+                print(f"[ERROR] VertexAgentEngine.chat_stream() intento {attempt + 1} falló: {e}")
+
+                # Manejo específico de errores
+                if "finish reason: 2" in error_msg or "safety" in error_msg:
+                    print("[DEBUG] Error de filtro de seguridad detectado")
+                    if attempt < max_retries:
+                        # Intentar con un prompt reformulado
+                        prompt = self._rephrase_prompt(prompt)
+                        print(f"[DEBUG] Reformulando prompt: {prompt}")
+                        continue
+                    else:
+                        yield self._get_safety_fallback_response()
+                        return
+
+                elif "model response did not complete" in error_msg:
+                    print("[DEBUG] Respuesta incompleta del modelo")
+                    if attempt < max_retries:
+                        continue
+                    else:
+                        yield self._get_fallback_response(prompt)
+                        return
+
+                elif attempt == max_retries:
+                    # Último intento fallido
+                    print("[ERROR] Todos los intentos fallaron, usando respuesta de fallback")
+                    yield self._get_generic_fallback_response()
+                    return
+
+        # Si llegamos aquí, algo salió muy mal
+        yield self._get_generic_fallback_response()
+
     def chat(self, prompt: str) -> str:
         """
         Envía un mensaje al modelo y obtiene respuesta en texto plano.
@@ -81,52 +151,9 @@ class VertexAgentEngine(LLMInterface):
         Returns:
             str: respuesta generada por el modelo o respuesta de fallback
         """
-        max_retries = 2
-
-        for attempt in range(max_retries + 1):
-            try:
-                print(f"[DEBUG] VertexAgentEngine.chat() Intento {attempt + 1} → Prompt: {prompt}")
-
-                response = self.chatSession.send_message(prompt)
-
-                # Verificar si la respuesta tiene contenido
-                if hasattr(response, 'text') and response.text and response.text.strip():
-                    print(f"[DEBUG] VertexAgentEngine.chat() → Respuesta exitosa: {response.text}")
-                    return response.text.strip()
-                else:
-                    print(f"[WARNING] Respuesta vacía en intento {attempt + 1}")
-                    if attempt == max_retries:
-                        return self._get_fallback_response(prompt)
-
-            except Exception as e:
-                error_msg = str(e).lower()
-                print(f"[ERROR] VertexAgentEngine.chat() intento {attempt + 1} falló: {e}")
-
-                # Manejo específico de errores
-                if "finish reason: 2" in error_msg or "safety" in error_msg:
-                    print("[DEBUG] Error de filtro de seguridad detectado")
-                    if attempt < max_retries:
-                        # Intentar con un prompt reformulado
-                        prompt = self._rephrase_prompt(prompt)
-                        print(f"[DEBUG] Reformulando prompt: {prompt}")
-                        continue
-                    else:
-                        return self._get_safety_fallback_response()
-
-                elif "model response did not complete" in error_msg:
-                    print("[DEBUG] Respuesta incompleta del modelo")
-                    if attempt < max_retries:
-                        continue
-                    else:
-                        return self._get_fallback_response(prompt)
-
-                elif attempt == max_retries:
-                    # Último intento fallido
-                    print("[ERROR] Todos los intentos fallaron, usando respuesta de fallback")
-                    return self._get_generic_fallback_response()
-
-        # Si llegamos aquí, algo salió muy mal
-        return self._get_generic_fallback_response()
+        # Recopilar todos los bloques del stream
+        blocks = list(self.chat_stream(prompt))
+        return " ".join(blocks) if blocks else self._get_generic_fallback_response()
 
     def _rephrase_prompt(self, original_prompt: str) -> str:
         """
