@@ -28,7 +28,8 @@ def run_streaming_tts_quickstart():
     # Generador de solicitudes
     def request_generator():
         # yield texttospeech.StreamingSynthesizeRequest(input=texttospeech.StreamingSynthesisInput(text="Hola, soy una prueba de texto a voz en tiempo real. "))
-        yield texttospeech.StreamingSynthesizeRequest(input=texttospeech.StreamingSynthesisInput(text="Como parte de esta prueba, estoy generando audio en tiempo real. Recuerda que la calidad del audio puede variar dependiendo de la conexión y otros factores. ¿Todo bien? . Ademas, estoy probando la capacidad de respuesta de este sistema. No obstante , es importante mencionar que la calidad del audio puede variar dependiendo de la conexión y otros factores. ¿Todo bien? . Ademas, estoy probando la capacidad de respuesta de este sistema. No obstante , es importante mencionar que la calidad del audio puede variar dependiendo de la conexión y otros factores. "))
+        yield texttospeech.StreamingSynthesizeRequest(input=texttospeech.StreamingSynthesisInput(text="!"))
+        # yield texttospeech.StreamingSynthesizeRequest(input=texttospeech.StreamingSynthesisInput(text="gulo en el libro de texto"))
         # yield texttospeech.StreamingSynthesizeRequest(input=texttospeech.StreamingSynthesisInput(text="¿Todo bien? . Ademas, estoy probando la capacidad de respuesta de este sistema. No obstante , es importante mencionar que la calidad del audio puede variar dependiendo de la conexión y otros factores. "))
         # yield texttospeech.StreamingSynthesizeRequest(input=texttospeech.StreamingSynthesisInput(text="Espero que sí. Gracias por tu paciencia mientras realizo esta prueba. "))
 

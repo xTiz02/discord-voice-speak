@@ -178,7 +178,7 @@ class DiscordBotService:
                         None,
                         lambda: self.context.llm_engine.chat(prompt)
                     ),
-                    timeout=30.0  # 30 segundos máximo
+                    timeout=15.0  # 15 segundos máximo
                 )
 
                 print(f"[DEBUG] Respuesta del LLM recibida: {response_text}")
