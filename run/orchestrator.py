@@ -16,7 +16,7 @@ def make_recognizer():
     r = sr.Recognizer()
     r.energy_threshold = 200
     r.dynamic_energy_threshold = True
-    r.pause_threshold = 2.0
+    r.pause_threshold = 4.0
     r.phrase_threshold = 1.2
     r.non_speaking_duration = 0.8
     print("[DEBUG] Recognizer configurado correctamente")
@@ -38,7 +38,7 @@ class DiscordBotService:
         # Buffers y timers por usuario para acumular frases
         self._user_buffers = {}
         self._user_timers = {}
-        self.SILENCE_TIMEOUT = 4.5
+        self.SILENCE_TIMEOUT = 0
 
         # Estado del bot para manejar interrupciones
         self._is_speaking = False
